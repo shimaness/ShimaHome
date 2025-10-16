@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(_req: NextRequest) {
+  const req = _req;
+  const url = req.nextUrl;
   const res = NextResponse.next();
   // Security headers (adjust CSP as needed when adding external origins)
   res.headers.set('X-Frame-Options', 'DENY');
@@ -21,6 +23,34 @@ export function middleware(_req: NextRequest) {
       "frame-ancestors 'none'",
     ].join('; '),
   );
+
+  // KYC gate: if logged-in but not verified, redirect to onboarding (except allowed paths)
+  try {
+    const path = url.pathname;
+    const allow = [
+      '/onboarding',
+      '/login',
+      '/register',
+      '/api',
+      '/health',
+      '/_next',
+      '/404',
+      '/500',
+    ];
+    const isAllowed = allow.some((p) => path.startsWith(p));
+    if (!isAllowed) {
+      const hasSession = Boolean(
+        req.cookies.get('session')?.value ||
+          req.cookies.get('__Secure-next-auth.session-token')?.value ||
+          req.cookies.get('next-auth.session-token')?.value,
+      );
+      const kycVerified = req.cookies.get('kyc_verified')?.value === 'true';
+      if (hasSession && !kycVerified) {
+        const dest = new URL('/onboarding/tenant', req.url);
+        return NextResponse.redirect(dest);
+      }
+    }
+  } catch {}
   return res;
 }
 

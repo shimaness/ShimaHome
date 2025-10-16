@@ -10,15 +10,25 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, account, profile }) {
+    async jwt({ token, account, profile }: any) {
       if (account && profile) {
         token.role = 'TENANT';
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: any) {
       (session as any).role = (token as any).role || 'TENANT';
       return session;
+    },
+    async redirect({ url, baseUrl }: any) {
+      // Always route back to onboarding to complete KYC after OAuth
+      try {
+        const u = new URL(baseUrl);
+        u.pathname = '/onboarding/tenant';
+        return u.toString();
+      } catch {
+        return baseUrl;
+      }
     },
   },
 };
