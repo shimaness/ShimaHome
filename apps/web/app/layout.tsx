@@ -1,4 +1,5 @@
 import './globals.css';
+import HeaderUser from '../components/HeaderUser';
 export const metadata = {
   title: "ShimaHome",
   description: "Tenant–Landlord platform",
@@ -34,16 +35,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="container flex items-center gap-3 py-3">
             <a href="/" className="text-xl font-semibold text-slate-900">ShimaHome</a>
             <nav className="ml-auto flex items-center gap-3 text-sm">
-              {/* SSR attempt; client component below ensures hydration shows session */}
               {me ? (
                 <span className="hidden sm:inline text-slate-600">{me.email}</span>
               ) : null}
-              {/* Client-side user menu */}
-              {/* @ts-expect-error Async Server Component importing Client Component */}
-              {await (async () => {
-                const HeaderUser = (await import('../components/HeaderUser')).default;
-                return <HeaderUser />;
-              })()}
+              <HeaderUser />
             </nav>
           </div>
         </header>
