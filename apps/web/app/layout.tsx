@@ -15,12 +15,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     const host = h.get('x-forwarded-host') ?? h.get('host');
     const proto = h.get('x-forwarded-proto') ?? 'http';
     const meUrl = `${proto}://${host}/api/auth/me`;
-    const res = await fetch(meUrl, { cache: 'no-store' });
+    const c = cookies();
+    const cookieHeader = c.getAll().map((ck) => `${ck.name}=${encodeURIComponent(ck.value)}`).join('; ');
+    const res = await fetch(meUrl, { cache: 'no-store', headers: { cookie: cookieHeader } });
     if (res.ok) {
       const data = await res.json();
       if (!('error' in data)) me = { email: data.email, role: data.role };
     }
-    const c = cookies();
     const raw = c.get('flash')?.value;
     if (raw) {
       try { flash = JSON.parse(decodeURIComponent(raw)); } catch {}
@@ -33,26 +34,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="container flex items-center gap-3 py-3">
             <a href="/" className="text-xl font-semibold text-slate-900">ShimaHome</a>
             <nav className="ml-auto flex items-center gap-3 text-sm">
+              {/* SSR attempt; client component below ensures hydration shows session */}
               {me ? (
-                <>
-                  <a href="/dashboard" className="text-slate-700 hover:text-slate-900">Dashboard</a>
-                  {me.role === 'LANDLORD' && (
-                    <a href="/landlord/onboarding" className="text-slate-700 hover:text-slate-900">Landlord</a>
-                  )}
-                  {me.role === 'ADMIN' && (
-                    <a href="/admin" className="text-slate-700 hover:text-slate-900">Admin</a>
-                  )}
-                  <span className="text-slate-700">{me.email} <span className="ml-1 rounded bg-slate-100 px-2 py-0.5 text-xs uppercase">{me.role}</span></span>
-                  <form method="post" action="/api/auth/logout">
-                    <button className="rounded-md border border-slate-300 px-3 py-1.5 hover:bg-slate-50">Logout</button>
-                  </form>
-                </>
-              ) : (
-                <>
-                  <a href="/login" className="text-slate-700 hover:text-slate-900">Login</a>
-                  <a href="/register" className="rounded-md bg-brand px-3 py-1.5 text-white hover:bg-brand-dark">Register</a>
-                </>
-              )}
+                <span className="hidden sm:inline text-slate-600">{me.email}</span>
+              ) : null}
+              {/* Client-side user menu */}
+              {/* @ts-expect-error Async Server Component importing Client Component */}
+              {await (async () => {
+                const HeaderUser = (await import('../components/HeaderUser')).default;
+                return <HeaderUser />;
+              })()}
             </nav>
           </div>
         </header>
