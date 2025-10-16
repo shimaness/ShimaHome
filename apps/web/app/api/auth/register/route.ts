@@ -6,17 +6,23 @@ export async function POST(request: Request) {
     let email = '';
     let password = '';
     let role: 'TENANT' | 'LANDLORD' | 'ADMIN' = 'TENANT';
+    let fullName = '';
+    let username = '';
 
     if (contentType.includes('application/json')) {
       const body = await request.json();
       email = body.email || '';
       password = body.password || '';
       role = body.role || 'TENANT';
+      fullName = body.fullName || '';
+      username = body.username || '';
     } else {
       const form = await request.formData();
       email = String(form.get('email') || '');
       password = String(form.get('password') || '');
       role = (String(form.get('role') || 'TENANT') as any) || 'TENANT';
+      fullName = String(form.get('fullName') || '');
+      username = String(form.get('username') || '');
     }
 
     const base = process.env.API_BASE_URL ?? 'http://localhost:4000';
@@ -42,7 +48,8 @@ export async function POST(request: Request) {
     } catch {}
 
     // Frontend-only fallback: create a mock session
-    const mockToken = `mock.${Buffer.from(JSON.stringify({ email, role, ts: Date.now() })).toString('base64')}`;
+    const name = fullName || username || email.split('@')[0];
+    const mockToken = `mock.${Buffer.from(JSON.stringify({ email, role, name, ts: Date.now() })).toString('base64')}`;
     const redirectUrl = new URL('/', request.url);
     const response = NextResponse.redirect(redirectUrl);
     response.cookies.set('session', mockToken, { httpOnly: true, path: '/', sameSite: 'lax', maxAge: 60 * 60 });

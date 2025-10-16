@@ -17,8 +17,10 @@ export async function GET(request: Request) {
   // Frontend-only mock session support: token like "mock.<base64>"
   if (token.startsWith('mock.')) {
     try {
-      const payload = JSON.parse(Buffer.from(token.split('.', 2)[1], 'base64').toString('utf8')) as { email?: string; role?: string };
-      return NextResponse.json({ email: payload.email || 'user@demo.local', role: payload.role || 'TENANT' });
+      const payload = JSON.parse(Buffer.from(token.split('.', 2)[1], 'base64').toString('utf8')) as { email?: string; role?: string; name?: string };
+      const email = payload.email || 'user@demo.local';
+      const name = payload.name || (email.includes('@') ? email.split('@')[0] : email);
+      return NextResponse.json({ email, role: payload.role || 'TENANT', name });
     } catch {}
   }
 
@@ -46,7 +48,9 @@ async function checkNextAuthSession(request: Request) {
     if (!res.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const session = await res.json();
     if (session?.user?.email) {
-      return NextResponse.json({ email: session.user.email, role: session?.role || 'TENANT' });
+      const email: string = session.user.email;
+      const name: string = session.user.name || (email.includes('@') ? email.split('@')[0] : email);
+      return NextResponse.json({ email, role: session?.role || 'TENANT', name });
     }
   } catch {}
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

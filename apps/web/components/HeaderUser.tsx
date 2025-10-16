@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 export default function HeaderUser() {
-  const [me, setMe] = useState<{ email: string; role: string } | null>(null);
+  const [me, setMe] = useState<{ email: string; role: string; name?: string } | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export default function HeaderUser() {
         if (res.ok) {
           const data = await res.json();
           if (!('error' in data)) {
-            if (alive) setMe({ email: data.email, role: data.role });
+            if (alive) setMe({ email: data.email, role: data.role, name: data.name });
           }
         }
       } finally {
@@ -36,19 +36,24 @@ export default function HeaderUser() {
     );
   }
 
+  const display = me.name && me.name.trim().length > 0 ? me.name : me.email;
+  const initial = (me.name?.[0] || me.email?.[0] || 'U').toUpperCase();
+
   return (
     <details className="relative">
       <summary className="list-none inline-flex items-center gap-2 cursor-pointer select-none">
         <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 text-xs font-medium">
-          {me.email?.[0]?.toUpperCase()}
+          {initial}
         </div>
-        <span className="hidden sm:inline text-slate-700">
-          {me.email}
-        </span>
+        <span className="hidden sm:inline text-slate-700">{display}</span>
         <span className="ml-1 hidden sm:inline rounded bg-slate-100 px-2 py-0.5 text-xs uppercase">{me.role}</span>
       </summary>
       <div className="absolute right-0 mt-2 w-56 rounded-md border border-slate-200 bg-white shadow">
-        <div className="px-3 py-2 text-xs text-slate-500">Account</div>
+        <div className="px-3 py-2 text-xs text-slate-500">Signed in as</div>
+        <div className="px-3 pb-2 text-sm">
+          <div className="font-medium text-slate-800">{display}</div>
+          <div className="text-slate-500 text-xs">{me.email}</div>
+        </div>
         <a href="/profile" className="block px-3 py-2 hover:bg-slate-50">Profile</a>
         <a href="/onboarding/tenant" className="block px-3 py-2 hover:bg-slate-50">Onboarding</a>
         <a href="/dashboard" className="block px-3 py-2 hover:bg-slate-50">Dashboard</a>
