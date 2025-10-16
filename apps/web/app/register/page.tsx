@@ -9,12 +9,14 @@ export default function RegisterPage() {
   const [info, setInfo] = useState<string | null>(null);
 
   // Step 1: basic creds + contact
+  const [role, setRole] = useState<'TENANT'|'LANDLORD'>('TENANT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [channel, setChannel] = useState<'email' | 'phone'>('email');
   const [challengeId, setChallengeId] = useState('');
   const [resendIn, setResendIn] = useState(0);
+  const [countryCode, setCountryCode] = useState('+254');
 
   // Step 2: OTP
   const [otp, setOtp] = useState('');
@@ -69,15 +71,16 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
+      const fullPhone = phone ? `${countryCode}${phone.replace(/^\+/, '')}` : '';
       const res = await fetch('/api/verify/send-otp', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ contact: channel === 'email' ? email : phone, channel }),
+        body: JSON.stringify({ contact: channel === 'email' ? email : fullPhone, channel }),
       });
       const data = await res.json();
       if (!res.ok || !data.challengeId) throw new Error(data?.error || 'Failed to send code');
       setChallengeId(data.challengeId);
-      setInfo('Verification code sent. It may take a few seconds to arrive.');
+      setInfo(data?.demoCode ? `Demo code: ${data.demoCode} (providers not configured)` : 'Verification code sent. It may take a few seconds to arrive.');
       setResendIn(30);
       const timer = setInterval(() => {
         setResendIn((s) => {
@@ -140,7 +143,7 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password, role: 'TENANT', phone, fullName, residence, dob, idNumber }),
+        body: JSON.stringify({ email, password, role, phone: `${countryCode}${phone.replace(/^\+/, '')}`, fullName, residence, dob, idNumber }),
       });
       if (res.redirected) {
         window.location.href = res.url;
@@ -157,7 +160,7 @@ export default function RegisterPage() {
 
   return (
     <main className="max-w-md mx-auto py-10">
-      <h1 className="text-2xl font-semibold">Create tenant account</h1>
+      <h1 className="text-2xl font-semibold">Create {role === 'TENANT' ? 'tenant' : 'landlord'} account</h1>
       <p className="text-slate-600 mt-1">Secure signup with contact verification and KYC auto-fill.</p>
 
       {error && (
@@ -167,6 +170,13 @@ export default function RegisterPage() {
       {step === 1 && (
         <form onSubmit={sendOtp} className="mt-6 space-y-4">
           <div className="grid gap-3">
+            <label className="block text-sm">
+              <span className="text-slate-700">Account type</span>
+              <select value={role} onChange={(e)=>setRole(e.target.value as any)} className="mt-1 w-full rounded-md border border-slate-300 p-2">
+                <option value="TENANT">Tenant</option>
+                <option value="LANDLORD">Landlord</option>
+              </select>
+            </label>
             <label className="block text-sm">
               <span className="text-slate-700">Email</span>
               <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required className={`mt-1 w-full rounded-md border p-2 ${email && !validateEmail(email) ? 'border-red-300' : 'border-slate-300'}`} placeholder="you@example.com" />
@@ -183,7 +193,16 @@ export default function RegisterPage() {
             </label>
             <label className="block text-sm">
               <span className="text-slate-700">Phone</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" className={`mt-1 w-full rounded-md border p-2 ${phone && !phoneLooksValid(phone) ? 'border-red-300' : 'border-slate-300'}`} placeholder="+2547XXXXXXXX" />
+              <div className="mt-1 flex gap-2">
+                <select value={countryCode} onChange={(e)=>setCountryCode(e.target.value)} className="w-28 rounded-md border border-slate-300 p-2">
+                  <option value="+254">KE +254</option>
+                  <option value="+255">TZ +255</option>
+                  <option value="+256">UG +256</option>
+                  <option value="+1">US +1</option>
+                  <option value="+44">UK +44</option>
+                </select>
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" className={`flex-1 rounded-md border p-2 ${phone && !phoneLooksValid(phone) ? 'border-red-300' : 'border-slate-300'}`} placeholder="7XXXXXXXX" />
+              </div>
             </label>
             <label className="block text-sm">
               <span className="text-slate-700">Verify via</span>

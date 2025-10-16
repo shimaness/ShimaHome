@@ -1,17 +1,56 @@
+"use client";
+
+import { useEffect, useState } from 'react';
+
 export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('shimahome.lastEmail');
+      if (saved) setEmail(saved);
+    } catch {}
+  }, []);
+
+  function validateEmail(v: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  }
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    setError(null);
+    if (!validateEmail(email)) {
+      e.preventDefault();
+      setError('Enter a valid email address.');
+      return;
+    }
+    try {
+      if (remember) localStorage.setItem('shimahome.lastEmail', email);
+      else localStorage.removeItem('shimahome.lastEmail');
+    } catch {}
+  }
+
   return (
     <main className="max-w-sm mx-auto py-10">
       <h1 className="text-2xl font-semibold">Login</h1>
       <p className="text-slate-600 mt-1">Sign in to your ShimaHome account.</p>
 
-      <form method="post" action="/api/auth/login" className="mt-6 space-y-4">
+      {error && (
+        <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
+      )}
+
+      <form method="post" action="/api/auth/login" onSubmit={onSubmit} className="mt-6 space-y-4">
         <label className="block text-sm">
           <span className="text-slate-700">Email</span>
           <input
             name="email"
             type="email"
+            value={email}
+            onChange={(e)=>setEmail(e.target.value)}
             required
-            className="mt-1 w-full rounded-md border border-slate-300 p-2"
+            className={`mt-1 w-full rounded-md border p-2 ${email && !validateEmail(email) ? 'border-red-300' : 'border-slate-300'}`}
             placeholder="you@example.com"
           />
         </label>
@@ -20,10 +59,16 @@ export default function LoginPage() {
           <input
             name="password"
             type="password"
+            value={password}
+            onChange={(e)=>setPassword(e.target.value)}
             required
             className="mt-1 w-full rounded-md border border-slate-300 p-2"
             placeholder="••••••••"
           />
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={remember} onChange={(e)=>setRemember(e.target.checked)} />
+          Remember my email on this device
         </label>
         <button type="submit" className="w-full rounded-md bg-brand px-3 py-2 text-white hover:bg-brand-dark">Sign in</button>
       </form>
