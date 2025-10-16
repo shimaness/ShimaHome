@@ -6,6 +6,7 @@ export default function RegisterPage() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   // Step 1: basic creds + contact
   const [email, setEmail] = useState('');
@@ -13,6 +14,7 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState('');
   const [channel, setChannel] = useState<'email' | 'phone'>('email');
   const [challengeId, setChallengeId] = useState('');
+  const [resendIn, setResendIn] = useState(0);
 
   // Step 2: OTP
   const [otp, setOtp] = useState('');
@@ -23,9 +25,49 @@ export default function RegisterPage() {
   const [residence, setResidence] = useState('');
   const [dob, setDob] = useState('');
 
+  function validateEmail(v: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  }
+
+  function phoneLooksValid(v: string) {
+    return v === '' || /^\+?[0-9\-\s]{9,15}$/.test(v);
+  }
+
+  function passwordScore(v: string) {
+    let score = 0;
+    if (v.length >= 8) score++;
+    if (/[A-Z]/.test(v)) score++;
+    if (/[a-z]/.test(v)) score++;
+    if (/[0-9]/.test(v)) score++;
+    if (/[^A-Za-z0-9]/.test(v)) score++;
+    return Math.min(score, 5);
+  }
+
+  const passScore = passwordScore(password);
+  const passLabel = ['Too short', 'Weak', 'Fair', 'Good', 'Strong'][Math.max(0, passScore - 1)] || 'Too short';
+  const passBar = ['bg-red-500','bg-orange-500','bg-yellow-500','bg-lime-500','bg-emerald-600'][Math.max(0, passScore - 1)] || 'bg-red-500';
+
   async function sendOtp(e: React.FormEvent) {
     e.preventDefault();
-    setError(null); setLoading(true);
+    setError(null); setInfo(null);
+    // client validation
+    if (!validateEmail(email)) {
+      setError('Enter a valid email address.');
+      return;
+    }
+    if (passScore < 3) {
+      setError('Use a stronger password (8+ chars, mix of cases, numbers, and a symbol).');
+      return;
+    }
+    if (channel === 'phone' && !phone) {
+      setError('Enter your phone number or switch verification channel.');
+      return;
+    }
+    if (!phoneLooksValid(phone)) {
+      setError('Phone number format looks invalid.');
+      return;
+    }
+    setLoading(true);
     try {
       const res = await fetch('/api/verify/send-otp', {
         method: 'POST',
@@ -35,6 +77,14 @@ export default function RegisterPage() {
       const data = await res.json();
       if (!res.ok || !data.challengeId) throw new Error(data?.error || 'Failed to send code');
       setChallengeId(data.challengeId);
+      setInfo('Verification code sent. It may take a few seconds to arrive.');
+      setResendIn(30);
+      const timer = setInterval(() => {
+        setResendIn((s) => {
+          if (s <= 1) { clearInterval(timer); return 0; }
+          return s - 1;
+        });
+      }, 1000);
       setStep(2);
     } catch (err: any) {
       setError(err.message || 'Failed to send code');
@@ -45,7 +95,7 @@ export default function RegisterPage() {
 
   async function confirmOtp(e: React.FormEvent) {
     e.preventDefault();
-    setError(null); setLoading(true);
+    setError(null); setInfo(null); setLoading(true);
     try {
       const res = await fetch('/api/verify/confirm-otp', {
         method: 'POST',
@@ -54,6 +104,7 @@ export default function RegisterPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.verified) throw new Error(data?.error || 'Invalid code');
+      setInfo('Contact verified. Continue with your details.');
       setStep(3);
     } catch (err: any) {
       setError(err.message || 'Invalid code');
@@ -84,7 +135,7 @@ export default function RegisterPage() {
 
   async function finalizeSignup(e: React.FormEvent) {
     e.preventDefault();
-    setError(null); setLoading(true);
+    setError(null); setInfo(null); setLoading(true);
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
@@ -118,15 +169,21 @@ export default function RegisterPage() {
           <div className="grid gap-3">
             <label className="block text-sm">
               <span className="text-slate-700">Email</span>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required className="mt-1 w-full rounded-md border border-slate-300 p-2" placeholder="you@example.com" />
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required className={`mt-1 w-full rounded-md border p-2 ${email && !validateEmail(email) ? 'border-red-300' : 'border-slate-300'}`} placeholder="you@example.com" />
             </label>
             <label className="block text-sm">
               <span className="text-slate-700">Password</span>
               <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required className="mt-1 w-full rounded-md border border-slate-300 p-2" placeholder="Create a strong password" />
+              <div className="mt-2 flex items-center gap-2">
+                <div className="h-2 w-24 rounded bg-slate-200 overflow-hidden">
+                  <div className={`h-full ${passBar}`} style={{ width: `${(passScore/5)*100}%` }} />
+                </div>
+                <span className="text-xs text-slate-600">{passLabel}</span>
+              </div>
             </label>
             <label className="block text-sm">
               <span className="text-slate-700">Phone</span>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" className="mt-1 w-full rounded-md border border-slate-300 p-2" placeholder="+2547XXXXXXXX" />
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" className={`mt-1 w-full rounded-md border p-2 ${phone && !phoneLooksValid(phone) ? 'border-red-300' : 'border-slate-300'}`} placeholder="+2547XXXXXXXX" />
             </label>
             <label className="block text-sm">
               <span className="text-slate-700">Verify via</span>
@@ -157,6 +214,7 @@ export default function RegisterPage() {
               {loading ? 'Verifying…' : 'Verify'}
             </button>
             <button type="button" onClick={() => setStep(1)} className="text-sm text-slate-600 hover:underline">Back</button>
+            <button type="button" disabled={resendIn>0} onClick={(e)=>sendOtp(e as any)} className="text-sm text-slate-600 hover:underline disabled:opacity-50">{resendIn>0?`Resend in ${resendIn}s`:'Resend code'}</button>
           </div>
         </form>
       )}
@@ -203,6 +261,10 @@ export default function RegisterPage() {
           <div className="text-sm">Welcome to ShimaHome! You can now continue to browse listings.</div>
           <div className="mt-3"><a className="rounded-md bg-brand px-3 py-2 text-white hover:bg-brand-dark" href="/">Go to home</a></div>
         </div>
+      )}
+
+      {info && (
+        <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">{info}</div>
       )}
 
       <p className="text-sm text-slate-600 mt-6">
