@@ -1,0 +1,51 @@
+import { NextResponse } from 'next/server';
+
+export async function POST(request: Request) {
+  try {
+    const contentType = request.headers.get('content-type') || '';
+    let email = '';
+    let password = '';
+    let role: 'TENANT' | 'LANDLORD' | 'ADMIN' = 'TENANT';
+
+    if (contentType.includes('application/json')) {
+      const body = await request.json();
+      email = body.email || '';
+      password = body.password || '';
+      role = body.role || 'TENANT';
+    } else {
+      const form = await request.formData();
+      email = String(form.get('email') || '');
+      password = String(form.get('password') || '');
+      role = (String(form.get('role') || 'TENANT') as any) || 'TENANT';
+    }
+
+    const base = process.env.API_BASE_URL ?? 'http://localhost:4000';
+    const res = await fetch(`${base}/auth/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password, role }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.token) {
+      const back = new URL('/register', request.url);
+      const r = NextResponse.redirect(back);
+      r.cookies.set('flash', encodeURIComponent(JSON.stringify({ type: 'error', text: data?.message || 'Registration failed' })), { path: '/', maxAge: 10 });
+      return r;
+    }
+
+    const redirectUrl = new URL('/', request.url);
+    const response = NextResponse.redirect(redirectUrl);
+    response.cookies.set('session', data.token, { httpOnly: true, path: '/', sameSite: 'lax' });
+    if (data.refresh) {
+      response.cookies.set('refresh', data.refresh, { httpOnly: true, path: '/', sameSite: 'lax', maxAge: 60 * 60 * 24 * 30 });
+    }
+    response.cookies.set('flash', encodeURIComponent(JSON.stringify({ type: 'success', text: 'Account created. Welcome!' })), { path: '/', maxAge: 10 });
+    return response;
+  } catch (e) {
+    const back = new URL('/register', request.url);
+    const r = NextResponse.redirect(back);
+    r.cookies.set('flash', encodeURIComponent(JSON.stringify({ type: 'error', text: 'Registration failed' })), { path: '/', maxAge: 10 });
+    return r;
+  }
+}

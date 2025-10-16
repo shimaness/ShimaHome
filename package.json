@@ -1,0 +1,18 @@
+{
+  "name": "shimahome",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "dev": "echo \"Define per-app dev scripts under apps/ and services/\"",
+    "build": "echo \"Run builds per workspace\"",
+    "lint": "echo \"Add eslint later\""
+  }
+}
