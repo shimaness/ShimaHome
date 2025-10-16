@@ -12,7 +12,7 @@ function getSessionCookie(req: Request): string | null {
 
 export async function GET(request: Request) {
   const token = getSessionCookie(request);
-  if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!token) return await checkNextAuthSession(request);
 
   // Frontend-only mock session support: token like "mock.<base64>"
   if (token.startsWith('mock.')) {
@@ -32,6 +32,22 @@ export async function GET(request: Request) {
     return NextResponse.json(data, { status: res.status });
   } catch {
     // fallback unauthorized if backend unreachable and not a mock
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return await checkNextAuthSession(request);
   }
+}
+
+async function checkNextAuthSession(request: Request) {
+  try {
+    const h = new Headers(request.headers);
+    const host = h.get('x-forwarded-host') ?? h.get('host');
+    const proto = h.get('x-forwarded-proto') ?? 'http';
+    const url = `${proto}://${host}/api/auth/session`;
+    const res = await fetch(url, { headers: { cookie: request.headers.get('cookie') || '' }, cache: 'no-store' });
+    if (!res.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const session = await res.json();
+    if (session?.user?.email) {
+      return NextResponse.json({ email: session.user.email, role: session?.role || 'TENANT' });
+    }
+  } catch {}
+  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 }
