@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Headers, Param, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Patch, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { LandlordService } from './landlord.service';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -120,5 +120,76 @@ export class LandlordController {
       },
     });
     return rec;
+  }
+
+  // New Property Management Endpoints
+  @Post('properties')
+  async createProperty(
+    @Headers('authorization') auth: string | undefined,
+    @Body() body: { name: string; description?: string; location: string; address?: string; latitude?: number; longitude?: number }
+  ) {
+    const uid = await this.getUserIdFromAuth(auth);
+    if (!uid) return { error: 'Unauthorized' };
+    return this.svc.createProperty(uid, body);
+  }
+
+  @Post('properties/:propertyId/units')
+  async createUnit(
+    @Headers('authorization') auth: string | undefined,
+    @Param('propertyId') propertyId: string,
+    @Body() body: { name: string; unitType: string; rent: number; deposit?: number; description?: string }
+  ) {
+    const uid = await this.getUserIdFromAuth(auth);
+    if (!uid) return { error: 'Unauthorized' };
+    return this.svc.createUnit(uid, propertyId, body);
+  }
+
+  @Post('units/:unitId/photos')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  async uploadUnitPhoto(
+    @Headers('authorization') auth: string | undefined,
+    @Param('unitId') unitId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { photoTag: string }
+  ) {
+    const uid = await this.getUserIdFromAuth(auth);
+    if (!uid) return { error: 'Unauthorized' };
+    if (!file) throw new BadRequestException('File is required');
+    if (!body?.photoTag) throw new BadRequestException('Missing photoTag');
+    const allowed = ['image/jpeg','image/png','image/webp'];
+    if (!allowed.includes(file.mimetype)) throw new BadRequestException('Unsupported file type');
+
+    // EXIF strip + normalize
+    let processed = file.buffer;
+    const img = sharp(file.buffer).rotate();
+    if (file.mimetype === 'image/jpeg') processed = await img.jpeg({ quality: 90 }).toBuffer();
+    else if (file.mimetype === 'image/png') processed = await img.png({ compressionLevel: 9 }).toBuffer();
+    else if (file.mimetype === 'image/webp') processed = await img.webp({ quality: 90 }).toBuffer();
+
+    const hash = crypto.createHash('sha256').update(processed).digest('hex');
+    const ext = file.originalname.includes('.') ? file.originalname.substring(file.originalname.lastIndexOf('.')) : '';
+    const dir = path.join(process.cwd(), 'uploads', 'units', unitId);
+    fs.mkdirSync(dir, { recursive: true });
+    const fname = `${Date.now()}-${hash.slice(0,12)}${ext}`;
+    fs.writeFileSync(path.join(dir, fname), processed);
+
+    return this.svc.createUnitPhoto(uid, unitId, {
+      storageKey: `uploads/units/${unitId}/${fname}`,
+      photoTag: body.photoTag,
+      fileName: file.originalname,
+      mimeType: file.mimetype,
+      size: processed.length,
+    });
+  }
+
+  @Patch('units/:unitId/occupancy')
+  async updateOccupancy(
+    @Headers('authorization') auth: string | undefined,
+    @Param('unitId') unitId: string,
+    @Body() body: { occupancyStatus: string }
+  ) {
+    const uid = await this.getUserIdFromAuth(auth);
+    if (!uid) return { error: 'Unauthorized' };
+    return this.svc.updateUnitOccupancy(uid, unitId, body.occupancyStatus);
   }
 }

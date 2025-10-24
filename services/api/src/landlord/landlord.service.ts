@@ -49,4 +49,92 @@ export class LandlordService {
     if (!sub || sub.userId !== userId) throw new NotFoundException('Submission not found');
     return this.prisma.propertySubmission.update({ where: { id: submissionId }, data: { status: 'UNDER_REVIEW' } });
   }
+
+  // New Property Management Methods
+  async createProperty(userId: string, input: { name: string; description?: string; location: string; address?: string; latitude?: number; longitude?: number }) {
+    // Get landlord profile
+    const profile = await this.prisma.landlordProfile.findUnique({ where: { userId } });
+    if (!profile) throw new BadRequestException('Landlord profile not found');
+
+    return this.prisma.propertyListing.create({
+      data: {
+        landlordId: profile.id,
+        name: input.name,
+        description: input.description,
+        location: input.location,
+        address: input.address,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        status: 'UNDER_REVIEW', // Admin needs to approve
+      },
+    });
+  }
+
+  async createUnit(userId: string, propertyId: string, input: { name: string; unitType: string; rent: number; deposit?: number; description?: string }) {
+    // Verify ownership
+    const property = await this.prisma.propertyListing.findUnique({
+      where: { id: propertyId },
+      include: { landlord: true },
+    });
+
+    if (!property || property.landlord.userId !== userId) {
+      throw new NotFoundException('Property not found or unauthorized');
+    }
+
+    return this.prisma.propertyUnit.create({
+      data: {
+        propertyId,
+        name: input.name,
+        unitType: input.unitType as any,
+        rent: input.rent,
+        deposit: input.deposit,
+        description: input.description,
+        occupancyStatus: 'VACANT', // Default to vacant
+      },
+    });
+  }
+
+  async createUnitPhoto(userId: string, unitId: string, input: { storageKey: string; photoTag: string; fileName?: string; mimeType?: string; size?: number }) {
+    // Verify ownership of unit
+    const unit = await this.prisma.propertyUnit.findUnique({
+      where: { id: unitId },
+      include: { property: { include: { landlord: true } } },
+    });
+
+    if (!unit || unit.property.landlord.userId !== userId) {
+      throw new NotFoundException('Unit not found or unauthorized');
+    }
+
+    // Count existing photos to set order
+    const photoCount = await this.prisma.unitPhoto.count({ where: { unitId } });
+
+    return this.prisma.unitPhoto.create({
+      data: {
+        unitId,
+        storageKey: input.storageKey,
+        photoTag: input.photoTag as any,
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        size: input.size,
+        order: photoCount,
+      },
+    });
+  }
+
+  async updateUnitOccupancy(userId: string, unitId: string, occupancyStatus: string) {
+    // Verify ownership
+    const unit = await this.prisma.propertyUnit.findUnique({
+      where: { id: unitId },
+      include: { property: { include: { landlord: true } } },
+    });
+
+    if (!unit || unit.property.landlord.userId !== userId) {
+      throw new NotFoundException('Unit not found or unauthorized');
+    }
+
+    return this.prisma.propertyUnit.update({
+      where: { id: unitId },
+      data: { occupancyStatus: occupancyStatus as any },
+    });
+  }
 }

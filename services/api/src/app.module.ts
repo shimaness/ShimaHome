@@ -17,6 +17,8 @@ import { TenantController } from './tenant/tenant.controller';
 import { TenantService } from './tenant/tenant.service';
 import { EmailService } from './email/email.service';
 import { SecurityService } from './security/security.service';
+import { DiscoverController } from './discover/discover.controller';
+import { DiscoverService } from './discover/discover.service';
 
 @Module({
   imports: [
@@ -26,7 +28,7 @@ import { SecurityService } from './security/security.service';
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     }),
   ],
-  controllers: [AppController, PropertiesController, AuthController, MfaController, KycController, LandlordController, TenantController],
-  providers: [AppService, PropertiesService, PrismaService, AuthService, MfaService, KycService, LandlordService, TenantService, EmailService, SecurityService],
+  controllers: [AppController, PropertiesController, AuthController, MfaController, KycController, LandlordController, TenantController, DiscoverController],
+  providers: [AppService, PropertiesService, PrismaService, AuthService, MfaService, KycService, LandlordService, TenantService, EmailService, SecurityService, DiscoverService],
 })
 export class AppModule {}
