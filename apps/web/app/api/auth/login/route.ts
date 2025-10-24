@@ -25,6 +25,14 @@ export async function POST(request: Request) {
       });
 
       const data = await res.json();
+      
+      // Handle MFA requirement
+      if (res.ok && data.requiresMfa && data.mfaToken) {
+        const mfaUrl = new URL('/login-mfa', request.url);
+        mfaUrl.searchParams.set('mfaToken', data.mfaToken);
+        return NextResponse.redirect(mfaUrl);
+      }
+      
       if (res.ok && data.token) {
         const redirectUrl = new URL('/', request.url);
         const response = NextResponse.redirect(redirectUrl);

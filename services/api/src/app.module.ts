@@ -7,6 +7,8 @@ import { PrismaService } from './prisma/prisma.service';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth/auth.controller';
 import { AuthService } from './auth/auth.service';
+import { MfaController } from './auth/mfa.controller';
+import { MfaService } from './auth/mfa.service';
 import { KycController } from './kyc/kyc.controller';
 import { KycService } from './kyc/kyc.service';
 import { LandlordController } from './landlord/landlord.controller';
@@ -22,7 +24,7 @@ import { TenantService } from './tenant/tenant.service';
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     }),
   ],
-  controllers: [AppController, PropertiesController, AuthController, KycController, LandlordController, TenantController],
-  providers: [AppService, PropertiesService, PrismaService, AuthService, KycService, LandlordService, TenantService],
+  controllers: [AppController, PropertiesController, AuthController, MfaController, KycController, LandlordController, TenantController],
+  providers: [AppService, PropertiesService, PrismaService, AuthService, MfaService, KycService, LandlordService, TenantService],
 })
 export class AppModule {}

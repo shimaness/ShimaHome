@@ -69,4 +69,10 @@ export class AuthController {
     if (!body?.token || !body?.password) return { error: 'Bad Request' };
     return this.auth.resetPassword(body.token, body.password);
   }
+
+  @Post('mfa/verify')
+  async verifyMfa(@Body() body: { mfaToken: string; code: string; trustDevice?: boolean; deviceFingerprint?: string }) {
+    if (!body?.mfaToken || !body?.code) return { error: 'Bad Request' };
+    return this.auth.verifyMfaAndLogin(body.mfaToken, body.code, body.trustDevice, body.deviceFingerprint);
+  }
 }

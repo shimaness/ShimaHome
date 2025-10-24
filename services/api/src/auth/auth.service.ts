@@ -70,13 +70,105 @@ export class AuthService {
     return { requiresEmailVerification: true, user: { id: user.id, email: user.email, role: user.role }, devCode: hint };
   }
 
-  async login(email: string, password: string, ip?: string) {
+  async login(email: string, password: string, ip?: string, deviceFingerprint?: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
     const ok = await bcrypt.compare(password, user.passwordHash);
     await this.prisma.loginAttempt.create({ data: { email, ip, succeeded: ok } }).catch(() => {});
     if (!ok) throw new UnauthorizedException('Invalid credentials');
     if (!user.emailVerified) throw new UnauthorizedException('Email not verified');
+    
+    // Check if MFA is enabled
+    if (user.mfaEnabled) {
+      // Check if device is trusted
+      let deviceTrusted = false;
+      if (deviceFingerprint) {
+        const deviceHash = crypto.createHash('sha256').update(deviceFingerprint).digest('hex');
+        const trusted = await this.prisma.trustedDevice.findFirst({
+          where: {
+            userId: user.id,
+            deviceHash,
+            expiresAt: { gt: new Date() },
+          },
+        });
+        deviceTrusted = !!trusted;
+      }
+
+      if (!deviceTrusted) {
+        // Create temporary token for MFA verification (short-lived)
+        const mfaToken = await this.jwt.signAsync(
+          { sub: user.id, type: 'mfa-pending' },
+          { expiresIn: '10m' }
+        );
+        return {
+          requiresMfa: true,
+          mfaToken,
+          message: 'MFA verification required',
+        };
+      }
+    }
+
+    // No MFA or trusted device - issue tokens
+    const token = await this.jwt.signAsync({ sub: user.id, role: user.role, email: user.email }, { expiresIn: process.env.ACCESS_TTL || '15m' });
+    const { raw: refresh } = await this.createRefreshToken(user.id);
+    return { token, refresh, user: { id: user.id, email: user.email, role: user.role } };
+  }
+
+  async verifyMfaAndLogin(mfaToken: string, code: string, trustDevice?: boolean, deviceFingerprint?: string) {
+    // Verify MFA token
+    const payload = await this.jwt.verifyAsync<{ sub: string; type: string }>(mfaToken).catch(() => null);
+    if (!payload || payload.type !== 'mfa-pending') {
+      throw new UnauthorizedException('Invalid MFA token');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user || !user.mfaEnabled || !user.mfaSecret) {
+      throw new UnauthorizedException('MFA not enabled');
+    }
+
+    // Verify TOTP code
+    const speakeasy = require('speakeasy');
+    const totpValid = speakeasy.totp.verify({
+      secret: user.mfaSecret,
+      encoding: 'base32',
+      token: code,
+      window: 2,
+    });
+
+    if (!totpValid) {
+      // Try backup codes
+      if (user.mfaBackupCodes) {
+        const backupCodes: string[] = JSON.parse(user.mfaBackupCodes);
+        const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+        const index = backupCodes.indexOf(codeHash);
+
+        if (index !== -1) {
+          // Valid backup code - remove it
+          backupCodes.splice(index, 1);
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: { mfaBackupCodes: JSON.stringify(backupCodes) },
+          });
+        } else {
+          throw new UnauthorizedException('Invalid MFA code');
+        }
+      } else {
+        throw new UnauthorizedException('Invalid MFA code');
+      }
+    }
+
+    // Trust device if requested
+    if (trustDevice && deviceFingerprint) {
+      const deviceHash = crypto.createHash('sha256').update(deviceFingerprint).digest('hex');
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+      await this.prisma.trustedDevice.upsert({
+        where: { userId_deviceHash: { userId: user.id, deviceHash } },
+        create: { userId: user.id, deviceHash, expiresAt },
+        update: { lastUsedAt: new Date(), expiresAt },
+      });
+    }
+
+    // Issue tokens
     const token = await this.jwt.signAsync({ sub: user.id, role: user.role, email: user.email }, { expiresIn: process.env.ACCESS_TTL || '15m' });
     const { raw: refresh } = await this.createRefreshToken(user.id);
     return { token, refresh, user: { id: user.id, email: user.email, role: user.role } };
@@ -87,7 +179,14 @@ export class AuthService {
     if (!user) throw new UnauthorizedException();
     const fullName = user.tenantProfile?.fullName || null;
     const displayName = user.tenantProfile?.displayName || null;
-    return { id: user.id, email: user.email, role: user.role, fullName, displayName };
+    return { 
+      id: user.id, 
+      email: user.email, 
+      role: user.role, 
+      fullName, 
+      displayName,
+      mfaEnabled: user.mfaEnabled,
+    };
   }
 
   async refresh(oldRefreshToken: string) {
