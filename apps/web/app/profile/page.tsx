@@ -1,8 +1,21 @@
+import { cookies, headers } from 'next/headers';
+
 export default async function ProfilePage() {
-  // Simple SSR fetch to get current profile and docs via internal API
+  // Simple SSR fetch to get current profile via internal API with cookies
   async function getMe() {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/auth/me`, { cache: 'no-store' });
+      const cookieStore = cookies();
+      const headersList = headers();
+      const host = headersList.get('host') || 'localhost:3000';
+      const proto = headersList.get('x-forwarded-proto') || 'http';
+      const cookieHeader = cookieStore.getAll().map(c => `${c.name}=${c.value}`).join('; ');
+      
+      const res = await fetch(`${proto}://${host}/api/auth/me`, { 
+        cache: 'no-store',
+        headers: {
+          cookie: cookieHeader,
+        }
+      });
       if (!res.ok) return null;
       const data = await res.json();
       if ('error' in data) return null;
