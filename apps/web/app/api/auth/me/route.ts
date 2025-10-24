@@ -31,6 +31,20 @@ export async function GET(request: Request) {
       cache: 'no-store',
     });
     const data = await res.json().catch(() => ({}));
+    // Compute preferred display name from backend-provided fields
+    try {
+      const preferred = data?.displayName || data?.fullName || undefined;
+      if (preferred) data.name = preferred;
+    } catch {}
+    // Merge display_name cookie as an override if present
+    try {
+      const cookieHeader = request.headers.get('cookie') || '';
+      const match = cookieHeader.match(/(?:^|;\s*)display_name=([^;]+)/);
+      if (match) {
+        const dn = decodeURIComponent(match[1]);
+        if (dn) data.name = dn;
+      }
+    } catch {}
     return NextResponse.json(data, { status: res.status });
   } catch {
     // fallback unauthorized if backend unreachable and not a mock

@@ -11,6 +11,8 @@ import { KycController } from './kyc/kyc.controller';
 import { KycService } from './kyc/kyc.service';
 import { LandlordController } from './landlord/landlord.controller';
 import { LandlordService } from './landlord/landlord.service';
+import { TenantController } from './tenant/tenant.controller';
+import { TenantService } from './tenant/tenant.service';
 
 @Module({
   imports: [
@@ -20,7 +22,7 @@ import { LandlordService } from './landlord/landlord.service';
       signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '7d' },
     }),
   ],
-  controllers: [AppController, PropertiesController, AuthController, KycController, LandlordController],
-  providers: [AppService, PropertiesService, PrismaService, AuthService, KycService, LandlordService],
+  controllers: [AppController, PropertiesController, AuthController, KycController, LandlordController, TenantController],
+  providers: [AppService, PropertiesService, PrismaService, AuthService, KycService, LandlordService, TenantService],
 })
 export class AppModule {}

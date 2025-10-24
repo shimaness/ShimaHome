@@ -36,7 +36,7 @@ export default function HeaderUser() {
     );
   }
 
-  const display = me.name && me.name.trim().length > 0 ? me.name : me.email;
+  const display = me.name && me.name.trim().length > 0 ? me.name : (me.email?.split('@')[0] || 'User');
   const initial = (me.name?.[0] || me.email?.[0] || 'U').toUpperCase();
 
   return (
@@ -46,20 +46,14 @@ export default function HeaderUser() {
           {initial}
         </div>
         <span className="hidden sm:inline text-slate-700">{display}</span>
-        <span className="ml-1 hidden sm:inline rounded bg-slate-100 px-2 py-0.5 text-xs uppercase">{me.role}</span>
       </summary>
       <div className="absolute right-0 mt-2 w-56 rounded-md border border-slate-200 bg-white shadow">
-        <div className="px-3 py-2 text-xs text-slate-500">Signed in as</div>
+        <div className="px-3 py-2 text-xs text-slate-500">Signed in</div>
         <div className="px-3 pb-2 text-sm">
           <div className="font-medium text-slate-800">{display}</div>
-          <div className="text-slate-500 text-xs">{me.email}</div>
         </div>
         <a href="/profile" className="block px-3 py-2 hover:bg-slate-50">Profile</a>
-        <a href="/onboarding/tenant" className="block px-3 py-2 hover:bg-slate-50">Onboarding</a>
         <a href="/dashboard" className="block px-3 py-2 hover:bg-slate-50">Dashboard</a>
-        {me.role === 'LANDLORD' && (
-          <a href="/landlord/onboarding" className="block px-3 py-2 hover:bg-slate-50">Landlord</a>
-        )}
         {me.role === 'ADMIN' && (
           <a href="/admin" className="block px-3 py-2 hover:bg-slate-50">Admin</a>
         )}

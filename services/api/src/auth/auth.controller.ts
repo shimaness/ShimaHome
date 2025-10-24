@@ -45,4 +45,16 @@ export class AuthController {
     if (!payload?.sub) return { error: 'Unauthorized' };
     return this.auth.logoutAll(payload.sub);
   }
+
+  @Post('verify-email')
+  async verifyEmail(@Body() body: { email: string; code: string }) {
+    if (!body?.email || !body?.code) return { error: 'Bad Request' };
+    return this.auth.verifyEmail(body.email, body.code);
+  }
+
+  @Post('verify-email/resend')
+  async resendVerify(@Body() body: { email: string }) {
+    if (!body?.email) return { error: 'Bad Request' };
+    return this.auth.resendEmailVerification(body.email);
+  }
 }

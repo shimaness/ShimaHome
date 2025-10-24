@@ -36,8 +36,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <a href="/" className="text-xl font-semibold text-slate-900">ShimaHome</a>
             <nav className="ml-auto flex items-center gap-3 text-sm">
               {me ? (
-                <span className="hidden sm:inline text-slate-600">{me.email}</span>
-              ) : null}
+                <>
+                  <a href="/profile" className="text-slate-700 hover:text-slate-900">Profile</a>
+                  <a href="/dashboard" className="text-slate-700 hover:text-slate-900">Dashboard</a>
+                </>
+              ) : (
+                <></>
+              )}
               <HeaderUser />
             </nav>
           </div>

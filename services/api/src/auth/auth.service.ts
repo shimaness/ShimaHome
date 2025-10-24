@@ -53,10 +53,21 @@ export class AuthService {
     const exists = await this.prisma.user.findUnique({ where: { email } });
     if (exists) throw new BadRequestException('Email already registered');
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await this.prisma.user.create({ data: { email, passwordHash, role } });
-    const token = await this.jwt.signAsync({ sub: user.id, role: user.role, email: user.email }, { expiresIn: process.env.ACCESS_TTL || '15m' });
-    const { raw: refresh } = await this.createRefreshToken(user.id);
-    return { token, refresh, user: { id: user.id, email: user.email, role: user.role } };
+    const user = await this.prisma.user.create({ data: { email, passwordHash, role, emailVerified: false } });
+    // Generate email verification code
+    const code = (Math.floor(100000 + Math.random() * 900000)).toString();
+    const ttlMin = Number(process.env.EMAIL_CODE_TTL_MIN || 15);
+    await this.prisma.verificationCode.create({
+      data: {
+        userId: user.id,
+        type: 'EMAIL',
+        code,
+        expiresAt: new Date(Date.now() + ttlMin * 60 * 1000),
+      },
+    });
+    // TODO: Integrate email provider; in dev mode expose the code for testing
+    const hint = String(process.env.EMAIL_DEV_MODE).toLowerCase() === 'true' ? code : undefined;
+    return { requiresEmailVerification: true, user: { id: user.id, email: user.email, role: user.role }, devCode: hint };
   }
 
   async login(email: string, password: string, ip?: string) {
@@ -65,18 +76,56 @@ export class AuthService {
     const ok = await bcrypt.compare(password, user.passwordHash);
     await this.prisma.loginAttempt.create({ data: { email, ip, succeeded: ok } }).catch(() => {});
     if (!ok) throw new UnauthorizedException('Invalid credentials');
+    if (!user.emailVerified) throw new UnauthorizedException('Email not verified');
     const token = await this.jwt.signAsync({ sub: user.id, role: user.role, email: user.email }, { expiresIn: process.env.ACCESS_TTL || '15m' });
     const { raw: refresh } = await this.createRefreshToken(user.id);
     return { token, refresh, user: { id: user.id, email: user.email, role: user.role } };
   }
 
   async me(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { tenantProfile: true } });
     if (!user) throw new UnauthorizedException();
-    return { id: user.id, email: user.email, role: user.role };
+    const fullName = user.tenantProfile?.fullName || null;
+    const displayName = user.tenantProfile?.displayName || null;
+    return { id: user.id, email: user.email, role: user.role, fullName, displayName };
   }
 
   async refresh(oldRefreshToken: string) {
     return this.rotateRefreshToken(oldRefreshToken);
+  }
+
+  async resendEmailVerification(email: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) throw new BadRequestException('Account not found');
+    if (user.emailVerified) return { ok: true };
+    const code = (Math.floor(100000 + Math.random() * 900000)).toString();
+    const ttlMin = Number(process.env.EMAIL_CODE_TTL_MIN || 15);
+    await this.prisma.verificationCode.create({
+      data: { userId: user.id, type: 'EMAIL', code, expiresAt: new Date(Date.now() + ttlMin * 60 * 1000) },
+    });
+    const hint = process.env.NODE_ENV === 'production' ? undefined : code;
+    return { ok: true, devCode: hint };
+  }
+
+  async verifyEmail(email: string, code: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) throw new BadRequestException('Account not found');
+    if (user.emailVerified) return { ok: true };
+    const rec = await this.prisma.verificationCode.findFirst({
+      where: {
+        userId: user.id,
+        type: 'EMAIL',
+        code,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!rec) throw new BadRequestException('Invalid or expired code');
+    await this.prisma.$transaction([
+      this.prisma.verificationCode.update({ where: { id: rec.id }, data: { consumedAt: new Date() } }),
+      this.prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } }),
+    ]);
+    return { ok: true };
   }
 }
