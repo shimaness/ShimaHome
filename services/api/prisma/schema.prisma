@@ -7,17 +7,19 @@ generator client {
 
 // Landlord onboarding
 model LandlordProfile {
-  id             String   @id @default(uuid())
-  user           User     @relation(fields: [userId], references: [id])
-  userId         String   @unique
+  id             String     @id @default(uuid())
+  user           User       @relation(fields: [userId], references: [id])
+  userId         String     @unique
   fullName       String
   phone          String
-  phoneVerified  Boolean  @default(false)
-  emailVerified  Boolean  @default(false)
+  phoneVerified  Boolean    @default(false)
+  emailVerified  Boolean    @default(false)
   idNumber       String
   residenceArea  String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  verified       Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  properties     PropertyListing[]
 }
 
 enum VerificationType {
@@ -70,6 +72,94 @@ model PropertyPhoto {
   size          Int?
   sha256        String?
   createdAt     DateTime            @default(now())
+}
+
+// New Property Management System
+enum PropertyListingStatus {
+  ACTIVE
+  INACTIVE
+  UNDER_REVIEW
+}
+
+enum UnitType {
+  SINGLE_ROOM
+  BEDSITTER
+  ONE_BEDROOM
+  TWO_BEDROOM
+  THREE_BEDROOM
+  STUDIO
+  OTHER
+}
+
+enum OccupancyStatus {
+  VACANT
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum PhotoTag {
+  BEDROOM
+  LIVING_ROOM
+  KITCHEN
+  TOILET
+  BATHROOM
+  BALCONY
+  COMPOUND
+  EXTERIOR
+  PARKING
+  OTHER
+}
+
+model PropertyListing {
+  id            String                 @id @default(uuid())
+  landlord      LandlordProfile        @relation(fields: [landlordId], references: [id])
+  landlordId    String
+  name          String                  // e.g., "Onesmus Hostels"
+  description   String?
+  location      String                  // e.g., "Meru"
+  address       String?
+  latitude      Float?
+  longitude     Float?
+  status        PropertyListingStatus   @default(UNDER_REVIEW)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  units         PropertyUnit[]
+  
+  @@index([location, status])
+  @@index([landlordId])
+}
+
+model PropertyUnit {
+  id            String           @id @default(uuid())
+  property      PropertyListing  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId    String
+  name          String           // e.g., "On 2"
+  unitType      UnitType         // e.g., ONE_BEDROOM
+  description   String?
+  rent          Int              // Monthly rent
+  deposit       Int?             // Security deposit
+  occupancyStatus OccupancyStatus @default(VACANT)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  photos        UnitPhoto[]
+  
+  @@index([propertyId, occupancyStatus])
+  @@index([unitType, occupancyStatus])
+}
+
+model UnitPhoto {
+  id          String       @id @default(uuid())
+  unit        PropertyUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  unitId      String
+  storageKey  String
+  photoTag    PhotoTag     // e.g., BEDROOM, KITCHEN
+  fileName    String?
+  mimeType    String?
+  size        Int?
+  order       Int          @default(0) // Display order
+  createdAt   DateTime     @default(now())
+  
+  @@index([unitId, photoTag])
 }
 
 model LoginAttempt {

@@ -34,11 +34,15 @@ export async function POST(request: Request) {
       }
       
       if (res.ok && data.token) {
-        const redirectUrl = new URL('/', request.url);
+        const redirectUrl = new URL('/welcome', request.url);
         const response = NextResponse.redirect(redirectUrl);
         response.cookies.set('session', data.token, { httpOnly: true, path: '/', sameSite: 'lax' });
         if (data.refresh) {
           response.cookies.set('refresh', data.refresh, { httpOnly: true, path: '/', sameSite: 'lax', maxAge: 60 * 60 * 24 * 30 });
+        }
+        // Store role for welcome page routing
+        if (data.user?.role) {
+          response.cookies.set('userRole', data.user.role, { httpOnly: false, path: '/', sameSite: 'lax', maxAge: 60 * 60 * 24 * 30 });
         }
         response.cookies.set('flash', encodeURIComponent(JSON.stringify({ type: 'success', text: 'Welcome back!' })), { path: '/', maxAge: 10 });
         return response;
