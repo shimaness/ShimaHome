@@ -280,6 +280,18 @@ export default function SecurityPage() {
         )}
       </div>
 
+      {/* Sessions & Login History */}
+      <div className="rounded-lg border border-slate-200 p-6">
+        <h2 className="text-lg font-semibold mb-2">Sessions & Login History</h2>
+        <p className="text-sm text-slate-600 mb-4">View active sessions and recent login activity on your account.</p>
+        <Link
+          href="/profile/security/sessions"
+          className="inline-block rounded-md border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+        >
+          Manage Sessions
+        </Link>
+      </div>
+
       {/* Password Change */}
       <div className="rounded-lg border border-slate-200 p-6">
         <h2 className="text-lg font-semibold mb-2">Password</h2>

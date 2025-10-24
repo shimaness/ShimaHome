@@ -75,4 +75,35 @@ export class AuthController {
     if (!body?.mfaToken || !body?.code) return { error: 'Bad Request' };
     return this.auth.verifyMfaAndLogin(body.mfaToken, body.code, body.trustDevice, body.deviceFingerprint);
   }
+
+  @Get('sessions')
+  async getSessions(@Headers('authorization') authHeader?: string) {
+    if (!authHeader?.startsWith('Bearer ')) return { error: 'Unauthorized' };
+    const token = authHeader.slice('Bearer '.length);
+    const payload = await this.jwt.verifyAsync<{ sub: string }>(token).catch(() => null);
+    if (!payload?.sub) return { error: 'Unauthorized' };
+    return this.auth.getActiveSessions(payload.sub);
+  }
+
+  @Post('sessions/:sessionId/revoke')
+  async revokeSession(
+    @Headers('authorization') authHeader: string | undefined,
+    @Body() body: { sessionId: string },
+  ) {
+    if (!authHeader?.startsWith('Bearer ')) return { error: 'Unauthorized' };
+    const token = authHeader.slice('Bearer '.length);
+    const payload = await this.jwt.verifyAsync<{ sub: string }>(token).catch(() => null);
+    if (!payload?.sub) return { error: 'Unauthorized' };
+    if (!body?.sessionId) return { error: 'Session ID required' };
+    return this.auth.revokeSession(payload.sub, body.sessionId);
+  }
+
+  @Get('login-history')
+  async getLoginHistory(@Headers('authorization') authHeader?: string) {
+    if (!authHeader?.startsWith('Bearer ')) return { error: 'Unauthorized' };
+    const token = authHeader.slice('Bearer '.length);
+    const payload = await this.jwt.verifyAsync<{ sub: string }>(token).catch(() => null);
+    if (!payload?.sub) return { error: 'Unauthorized' };
+    return this.auth.getLoginHistory(payload.sub);
+  }
 }

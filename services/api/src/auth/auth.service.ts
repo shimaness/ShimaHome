@@ -8,7 +8,7 @@ import * as crypto from 'crypto';
 export class AuthService {
   constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
 
-  private async createRefreshToken(userId: string) {
+  private async createRefreshToken(userId: string, deviceInfo?: { name?: string; type?: string; ip?: string; userAgent?: string }) {
     const tokenRaw = crypto.randomUUID() + ':' + Math.random().toString(36).slice(2);
     const tokenHash = await bcrypt.hash(tokenRaw, 10);
     const ttlDays = Number(process.env.REFRESH_TTL_DAYS || 30);
@@ -16,6 +16,10 @@ export class AuthService {
       data: {
         userId,
         tokenHash,
+        deviceName: deviceInfo?.name,
+        deviceType: deviceInfo?.type,
+        ipAddress: deviceInfo?.ip,
+        userAgent: deviceInfo?.userAgent,
         expiresAt: new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000),
       },
     });
@@ -45,6 +49,73 @@ export class AuthService {
     return { ok: true };
   }
 
+  // Session management
+  async getActiveSessions(userId: string) {
+    const sessions = await this.prisma.refreshToken.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { lastUsedAt: 'desc' },
+      select: {
+        id: true,
+        deviceName: true,
+        deviceType: true,
+        ipAddress: true,
+        lastUsedAt: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+    });
+
+    return sessions.map(s => ({
+      id: s.id,
+      device: s.deviceName || 'Unknown Device',
+      deviceType: s.deviceType || 'desktop',
+      ip: s.ipAddress,
+      lastUsed: s.lastUsedAt,
+      createdAt: s.createdAt,
+      expiresAt: s.expiresAt,
+    }));
+  }
+
+  async revokeSession(userId: string, sessionId: string) {
+    const session = await this.prisma.refreshToken.findFirst({
+      where: { id: sessionId, userId, revokedAt: null },
+    });
+
+    if (!session) {
+      throw new BadRequestException('Session not found');
+    }
+
+    await this.prisma.refreshToken.update({
+      where: { id: sessionId },
+      data: { revokedAt: new Date() },
+    });
+
+    return { ok: true, message: 'Session revoked' };
+  }
+
+  // Login history
+  async getLoginHistory(userId: string, limit = 50) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+
+    const attempts = await this.prisma.loginAttempt.findMany({
+      where: { email: user.email },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    return attempts.map(a => ({
+      id: a.id,
+      ip: a.ip,
+      succeeded: a.succeeded,
+      timestamp: a.createdAt,
+    }));
+  }
+
   async register(email: string, password: string, role: 'TENANT' | 'LANDLORD' | 'ADMIN' = 'TENANT') {
     // Basic password policy: min 8 chars, include letters and numbers
     if (!password || password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
@@ -70,7 +141,7 @@ export class AuthService {
     return { requiresEmailVerification: true, user: { id: user.id, email: user.email, role: user.role }, devCode: hint };
   }
 
-  async login(email: string, password: string, ip?: string, deviceFingerprint?: string) {
+  async login(email: string, password: string, ip?: string, deviceFingerprint?: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
     const ok = await bcrypt.compare(password, user.passwordHash);
@@ -97,7 +168,7 @@ export class AuthService {
       if (!deviceTrusted) {
         // Create temporary token for MFA verification (short-lived)
         const mfaToken = await this.jwt.signAsync(
-          { sub: user.id, type: 'mfa-pending' },
+          { sub: user.id, type: 'mfa-pending', ip, userAgent },
           { expiresIn: '10m' }
         );
         return {
@@ -110,13 +181,39 @@ export class AuthService {
 
     // No MFA or trusted device - issue tokens
     const token = await this.jwt.signAsync({ sub: user.id, role: user.role, email: user.email }, { expiresIn: process.env.ACCESS_TTL || '15m' });
-    const { raw: refresh } = await this.createRefreshToken(user.id);
+    const deviceInfo = this.parseDeviceInfo(userAgent, ip);
+    const { raw: refresh } = await this.createRefreshToken(user.id, deviceInfo);
     return { token, refresh, user: { id: user.id, email: user.email, role: user.role } };
+  }
+
+  private parseDeviceInfo(userAgent?: string, ip?: string): { name?: string; type?: string; ip?: string; userAgent?: string } {
+    if (!userAgent) return { ip };
+    
+    let deviceType = 'desktop';
+    let deviceName = 'Unknown Device';
+    
+    // Simple device detection
+    if (/mobile|android|iphone|ipad|ipod/i.test(userAgent)) {
+      deviceType = 'mobile';
+      if (/iphone|ipad|ipod/i.test(userAgent)) deviceName = 'iOS Device';
+      else if (/android/i.test(userAgent)) deviceName = 'Android Device';
+    } else if (/tablet|ipad/i.test(userAgent)) {
+      deviceType = 'tablet';
+      deviceName = 'Tablet';
+    }
+    
+    // Browser detection
+    if (/chrome/i.test(userAgent) && !/edge|edg/i.test(userAgent)) deviceName += ' (Chrome)';
+    else if (/safari/i.test(userAgent) && !/chrome/i.test(userAgent)) deviceName += ' (Safari)';
+    else if (/firefox/i.test(userAgent)) deviceName += ' (Firefox)';
+    else if (/edge|edg/i.test(userAgent)) deviceName += ' (Edge)';
+    
+    return { name: deviceName, type: deviceType, ip, userAgent };
   }
 
   async verifyMfaAndLogin(mfaToken: string, code: string, trustDevice?: boolean, deviceFingerprint?: string) {
     // Verify MFA token
-    const payload = await this.jwt.verifyAsync<{ sub: string; type: string }>(mfaToken).catch(() => null);
+    const payload = await this.jwt.verifyAsync<{ sub: string; type: string; ip?: string; userAgent?: string }>(mfaToken).catch(() => null);
     if (!payload || payload.type !== 'mfa-pending') {
       throw new UnauthorizedException('Invalid MFA token');
     }
@@ -168,9 +265,10 @@ export class AuthService {
       });
     }
 
-    // Issue tokens
+    // Issue tokens with device info from MFA token
     const token = await this.jwt.signAsync({ sub: user.id, role: user.role, email: user.email }, { expiresIn: process.env.ACCESS_TTL || '15m' });
-    const { raw: refresh } = await this.createRefreshToken(user.id);
+    const deviceInfo = this.parseDeviceInfo(payload.userAgent, payload.ip);
+    const { raw: refresh } = await this.createRefreshToken(user.id, deviceInfo);
     return { token, refresh, user: { id: user.id, email: user.email, role: user.role } };
   }
 
