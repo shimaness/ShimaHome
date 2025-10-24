@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: shimahome-api
+    env: node
+    region: oregon
+    plan: free
+    rootDir: services/api
+    buildCommand: npm install && npx prisma generate && npx prisma db push && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ACCESS_TTL
+        value: 15m
+      - key: REFRESH_TTL_DAYS
+        value: 30
+      - key: EMAIL_DEV_MODE
+        value: true
+      - key: WEB_ORIGIN
+        sync: false
