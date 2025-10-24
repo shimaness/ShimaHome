@@ -90,6 +90,18 @@ model RefreshToken {
   revokedAt  DateTime?
 }
 
+model PasswordResetToken {
+  id         String   @id @default(uuid())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  token      String   @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+  
+  @@index([token, consumedAt])
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -219,6 +231,7 @@ model User {
   landlordProfile LandlordProfile?
   kycDocuments  KycDocument[]
   refreshTokens RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
   kycChecks     KycCheck[]
   propertySubmissions PropertySubmission[]
   verificationCodes VerificationCode[]

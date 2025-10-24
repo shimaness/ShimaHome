@@ -57,4 +57,16 @@ export class AuthController {
     if (!body?.email) return { error: 'Bad Request' };
     return this.auth.resendEmailVerification(body.email);
   }
+
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: { email: string }) {
+    if (!body?.email) return { error: 'Bad Request' };
+    return this.auth.requestPasswordReset(body.email);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body() body: { token: string; password: string }) {
+    if (!body?.token || !body?.password) return { error: 'Bad Request' };
+    return this.auth.resetPassword(body.token, body.password);
+  }
 }
