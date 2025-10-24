@@ -1,12 +1,19 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
+import { SecurityService } from '../security/security.service';
+import { EmailService } from '../email/email.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly security: SecurityService,
+    private readonly email: EmailService,
+  ) {}
 
   private async createRefreshToken(userId: string, deviceInfo?: { name?: string; type?: string; ip?: string; userAgent?: string }) {
     const tokenRaw = crypto.randomUUID() + ':' + Math.random().toString(36).slice(2);
@@ -136,17 +143,63 @@ export class AuthService {
         expiresAt: new Date(Date.now() + ttlMin * 60 * 1000),
       },
     });
-    // TODO: Integrate email provider; in dev mode expose the code for testing
+
+    // Send email verification code
+    try {
+      await this.email.sendVerificationCode(user.email, code, ttlMin);
+    } catch (error) {
+      console.error('Failed to send verification email:', error);
+    }
+
+    // In dev mode, return the code for testing
     const hint = String(process.env.EMAIL_DEV_MODE).toLowerCase() === 'true' ? code : undefined;
     return { requiresEmailVerification: true, user: { id: user.id, email: user.email, role: user.role }, devCode: hint };
   }
 
   async login(email: string, password: string, ip?: string, deviceFingerprint?: string, userAgent?: string) {
+    // Check if account is locked
+    const lockStatus = await this.security.isAccountLocked(email);
+    if (lockStatus.locked) {
+      throw new UnauthorizedException(`Account locked until ${lockStatus.until?.toLocaleString()}`);
+    }
+
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) {
+      // Log failed attempt even if user doesn't exist (prevent enumeration but track)
+      await this.prisma.loginAttempt.create({ 
+        data: { email, ip, userAgent, succeeded: false, failReason: 'Invalid credentials' } 
+      }).catch(() => {});
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
     const ok = await bcrypt.compare(password, user.passwordHash);
-    await this.prisma.loginAttempt.create({ data: { email, ip, succeeded: ok } }).catch(() => {});
-    if (!ok) throw new UnauthorizedException('Invalid credentials');
+    
+    // Log the attempt
+    await this.prisma.loginAttempt.create({ 
+      data: { email, ip, userAgent, succeeded: ok, failReason: ok ? null : 'Invalid password' } 
+    }).catch(() => {});
+
+    if (!ok) {
+      // Handle failed login
+      const result = await this.security.handleFailedLogin(email, ip, userAgent);
+      await this.security.logSecurityEvent('LOGIN_FAILED', {
+        userId: user.id,
+        email: user.email,
+        ipAddress: ip,
+        userAgent,
+        metadata: { attemptsRemaining: result.attemptsRemaining },
+      });
+
+      if (result.locked) {
+        throw new UnauthorizedException(`Too many failed attempts. Account locked for 15 minutes.`);
+      }
+
+      const attemptsMsg = result.attemptsRemaining === 1 
+        ? '1 attempt remaining before account lockout' 
+        : `${result.attemptsRemaining} attempts remaining`;
+      throw new UnauthorizedException(`Invalid credentials. ${attemptsMsg}.`);
+    }
+
     if (!user.emailVerified) throw new UnauthorizedException('Email not verified');
     
     // Check if MFA is enabled
@@ -183,6 +236,10 @@ export class AuthService {
     const token = await this.jwt.signAsync({ sub: user.id, role: user.role, email: user.email }, { expiresIn: process.env.ACCESS_TTL || '15m' });
     const deviceInfo = this.parseDeviceInfo(userAgent, ip);
     const { raw: refresh } = await this.createRefreshToken(user.id, deviceInfo);
+    
+    // Handle successful login (reset attempts, log event, check new device)
+    await this.security.handleSuccessfulLogin(user.id, deviceInfo);
+    
     return { token, refresh, user: { id: user.id, email: user.email, role: user.role } };
   }
 
@@ -300,7 +357,15 @@ export class AuthService {
     await this.prisma.verificationCode.create({
       data: { userId: user.id, type: 'EMAIL', code, expiresAt: new Date(Date.now() + ttlMin * 60 * 1000) },
     });
-    const hint = process.env.NODE_ENV === 'production' ? undefined : code;
+
+    // Send email verification code
+    try {
+      await this.email.sendVerificationCode(user.email, code, ttlMin);
+    } catch (error) {
+      console.error('Failed to send verification email:', error);
+    }
+
+    const hint = String(process.env.EMAIL_DEV_MODE).toLowerCase() === 'true' ? code : undefined;
     return { ok: true, devCode: hint };
   }
 
@@ -354,8 +419,20 @@ export class AuthService {
       },
     });
 
-    // TODO: Send email with reset link
-    // For now, return token in dev mode
+    // Log security event
+    await this.security.logSecurityEvent('PASSWORD_RESET_REQUESTED', {
+      userId: user.id,
+      email: user.email,
+    });
+
+    // Send email with reset link
+    try {
+      await this.email.sendPasswordResetRequest(user.email, token);
+    } catch (error) {
+      console.error('Failed to send password reset email:', error);
+    }
+
+    // For dev mode, return token
     const devMode = String(process.env.EMAIL_DEV_MODE).toLowerCase() === 'true';
     const resetLink = devMode ? token : undefined;
 
@@ -409,7 +486,7 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: resetToken.userId },
-        data: { passwordHash },
+        data: { passwordHash, failedLoginAttempts: 0, lockedUntil: null },
       }),
       this.prisma.passwordResetToken.update({
         where: { id: resetToken.id },
@@ -422,7 +499,18 @@ export class AuthService {
       }),
     ]);
 
-    // TODO: Send security notification email
+    // Log security event
+    await this.security.logSecurityEvent('PASSWORD_RESET_COMPLETED', {
+      userId: resetToken.userId,
+      email: resetToken.user.email,
+    });
+
+    // Send security notification email
+    try {
+      await this.email.sendPasswordChanged(resetToken.user.email);
+    } catch (error) {
+      console.error('Failed to send password changed email:', error);
+    }
 
     return { ok: true, message: 'Password reset successful. Please log in with your new password.' };
   }

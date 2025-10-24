@@ -15,6 +15,8 @@ import { LandlordController } from './landlord/landlord.controller';
 import { LandlordService } from './landlord/landlord.service';
 import { TenantController } from './tenant/tenant.controller';
 import { TenantService } from './tenant/tenant.service';
+import { EmailService } from './email/email.service';
+import { SecurityService } from './security/security.service';
 
 @Module({
   imports: [
@@ -25,6 +27,6 @@ import { TenantService } from './tenant/tenant.service';
     }),
   ],
   controllers: [AppController, PropertiesController, AuthController, MfaController, KycController, LandlordController, TenantController],
-  providers: [AppService, PropertiesService, PrismaService, AuthService, MfaService, KycService, LandlordService, TenantService],
+  providers: [AppService, PropertiesService, PrismaService, AuthService, MfaService, KycService, LandlordService, TenantService, EmailService, SecurityService],
 })
 export class AppModule {}

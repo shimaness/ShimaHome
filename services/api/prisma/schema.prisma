@@ -73,11 +73,42 @@ model PropertyPhoto {
 }
 
 model LoginAttempt {
-  id        String   @id @default(uuid())
-  email     String
-  ip        String?
-  succeeded Boolean
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  email      String
+  ip         String?
+  userAgent  String?
+  succeeded  Boolean
+  failReason String?
+  createdAt  DateTime @default(now())
+  
+  @@index([email, createdAt])
+}
+
+enum SecurityEventType {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  MFA_ENABLED
+  MFA_DISABLED
+  SESSION_REVOKED
+  ACCOUNT_LOCKED
+  ACCOUNT_UNLOCKED
+  NEW_DEVICE_LOGIN
+}
+
+model SecurityEvent {
+  id        String            @id @default(uuid())
+  userId    String?
+  email     String?
+  eventType SecurityEventType
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime          @default(now())
+  
+  @@index([userId, createdAt])
+  @@index([email, createdAt])
 }
 
 model RefreshToken {
@@ -241,16 +272,18 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String    @id @default(uuid())
+  email        String    @unique
   passwordHash String
-  role         Role     @default(TENANT)
+  role         Role      @default(TENANT)
   emailVerified Boolean  @default(false)
-  mfaEnabled   Boolean  @default(false)
+  mfaEnabled   Boolean   @default(false)
   mfaSecret    String?
   mfaBackupCodes String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  lockedUntil  DateTime?
+  failedLoginAttempts Int @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   tenantProfile TenantProfile?
   landlordProfile LandlordProfile?
   kycDocuments  KycDocument[]

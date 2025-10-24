@@ -1,12 +1,18 @@
 import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { SecurityService } from '../security/security.service';
+import { EmailService } from '../email/email.service';
 import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
 import * as crypto from 'crypto';
 
 @Injectable()
 export class MfaService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly security: SecurityService,
+    private readonly email: EmailService,
+  ) {}
 
   // Generate TOTP secret and QR code for enrollment
   async setupMfa(userId: string) {
@@ -82,6 +88,19 @@ export class MfaService {
       },
     });
 
+    // Log security event
+    await this.security.logSecurityEvent('MFA_ENABLED', {
+      userId: user.id,
+      email: user.email,
+    });
+
+    // Send email notification
+    try {
+      await this.email.sendMfaEnabled(user.email);
+    } catch (error) {
+      console.error('Failed to send MFA enabled email:', error);
+    }
+
     return {
       ok: true,
       backupCodes, // Return raw codes ONCE for user to save
@@ -128,6 +147,9 @@ export class MfaService {
 
   // Disable MFA (requires password confirmation in controller)
   async disableMfa(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+
     await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -139,6 +161,19 @@ export class MfaService {
 
     // Remove all trusted devices
     await this.prisma.trustedDevice.deleteMany({ where: { userId } });
+
+    // Log security event
+    await this.security.logSecurityEvent('MFA_DISABLED', {
+      userId: user.id,
+      email: user.email,
+    });
+
+    // Send email notification
+    try {
+      await this.email.sendMfaDisabled(user.email);
+    } catch (error) {
+      console.error('Failed to send MFA disabled email:', error);
+    }
 
     return { ok: true, message: 'MFA disabled successfully' };
   }
