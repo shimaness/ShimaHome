@@ -13,6 +13,10 @@ export default function LoginMfaPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!searchParams) {
+      router.push("/login");
+      return;
+    }
     const token = searchParams.get("mfaToken");
     if (token) {
       setMfaToken(token);

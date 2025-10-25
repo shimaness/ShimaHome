@@ -43,6 +43,7 @@ export default function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
+    if (!searchParams) return;
     const t = searchParams.get("token");
     if (t) setToken(t);
   }, [searchParams]);
