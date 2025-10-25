@@ -568,13 +568,17 @@ export default function RegisterPropertyPage() {
 
           <div className="flex gap-4 justify-center">
             <button
+              type="button"
               onClick={resetForNewUnit}
               className="rounded-md bg-indigo-600 px-6 py-3 text-white font-medium hover:bg-indigo-700"
             >
               Add Another Unit to {createdProperty?.name}
             </button>
             <button
-              onClick={() => router.push("/landlord/dashboard")}
+              type="button"
+              onClick={() => {
+                router.push("/landlord/dashboard");
+              }}
               className="rounded-md border border-slate-300 px-6 py-3 text-slate-700 font-medium hover:bg-slate-50"
             >
               Go to Dashboard
