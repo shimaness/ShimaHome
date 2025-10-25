@@ -439,13 +439,13 @@ export default function RegisterPropertyPage() {
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {Object.entries(
-                  uploadedPhotos.reduce((acc: any, photo) => {
+                  uploadedPhotos.reduce((acc: Record<string, number>, photo) => {
                     acc[photo.photoTag] = (acc[photo.photoTag] || 0) + 1;
                     return acc;
-                  }, {})
+                  }, {} as Record<string, number>)
                 ).map(([tag, count]) => (
                   <span key={tag} className="text-xs bg-white px-2 py-1 rounded border border-green-300">
-                    {tag}: {count}
+                    {tag}: {count as number}
                   </span>
                 ))}
               </div>
