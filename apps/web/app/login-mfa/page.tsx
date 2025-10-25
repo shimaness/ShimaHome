@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
+export const dynamic = 'force-dynamic';
+
 export default function LoginMfaPage() {
   const searchParams = useSearchParams();
   const router = useRouter();

@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 
+export const dynamic = 'force-dynamic';
+
 function calculatePasswordStrength(password: string): { score: number; label: string; color: string } {
   let score = 0;
   
