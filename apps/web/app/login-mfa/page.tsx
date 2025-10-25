@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
-export const dynamic = 'force-dynamic';
-
-export default function LoginMfaPage() {
+function LoginMfaContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [mfaToken, setMfaToken] = useState("");
@@ -171,5 +169,20 @@ export default function LoginMfaPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginMfaPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </main>
+    }>
+      <LoginMfaContent />
+    </Suspense>
   );
 }
