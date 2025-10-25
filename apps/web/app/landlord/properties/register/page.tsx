@@ -30,6 +30,10 @@ export default function RegisterPropertyPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
 
+  const handleGoToDashboard = () => {
+    router.push("/landlord/dashboard");
+  };
+
   // Step 1: Property Details
   const [propertyName, setPropertyName] = useState("");
   const [description, setDescription] = useState("");
@@ -576,9 +580,7 @@ export default function RegisterPropertyPage() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                router.push("/landlord/dashboard");
-              }}
+              onClick={handleGoToDashboard}
               className="rounded-md border border-slate-300 px-6 py-3 text-slate-700 font-medium hover:bg-slate-50"
             >
               Go to Dashboard
