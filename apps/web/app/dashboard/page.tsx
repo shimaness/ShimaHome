@@ -1,11 +1,18 @@
 export default async function DashboardPage() {
   async function getMe() {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/auth/me`, { cache: 'no-store' });
+      const { headers: hdrs, cookies } = await import('next/headers');
+      const h = hdrs();
+      const host = h.get('x-forwarded-host') ?? h.get('host');
+      const proto = h.get('x-forwarded-proto') ?? 'http';
+      const url = `${proto}://${host}/api/auth/me`;
+      const c = cookies();
+      const cookieHeader = c.getAll().map((ck) => `${ck.name}=${encodeURIComponent(ck.value)}`).join('; ');
+      const res = await fetch(url, { cache: 'no-store', headers: { cookie: cookieHeader } });
       if (!res.ok) return null;
       const data = await res.json();
       if ('error' in data) return null;
-      return data as { id: string; email: string; role: 'TENANT'|'LANDLORD'|'ADMIN' };
+      return data as { email: string; role: 'TENANT'|'LANDLORD'|'ADMIN' };
     } catch { return null; }
   }
   const me = await getMe();

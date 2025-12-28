@@ -1,4 +1,4 @@
-import './globals.css';
+cimport './globals.css';
 import HeaderUser from '../components/HeaderUser';
 export const metadata = {
   title: "ShimaHome",
