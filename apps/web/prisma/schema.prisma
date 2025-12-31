@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  TENANT
+  LANDLORD
+  ADMIN
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      Role     @default(TENANT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  profile   Profile?
+  kyc       Kyc?
+}
+
+model Profile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  fullName  String?
+  phone     String?
+  residence String?
+  avatarUrl String?
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Kyc {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  idType     String?
+  idNumber   String?
+  verified   Boolean  @default(false)
+  verifiedAt DateTime?
+  user       User     @relation(fields: [userId], references: [id])
+}
